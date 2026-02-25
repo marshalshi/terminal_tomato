@@ -73,3 +73,8 @@ cargo build --release
 
 - If audio doesn’t play, confirm `sound_path` is valid and readable.
 - If the timer doesn’t start, press `s` to start the first session.
+
+
+# Example screenshot
+
+![Screenshot](screenshot.png)
