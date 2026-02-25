@@ -3,22 +3,22 @@ use crossterm::{
     event::{self, Event, KeyCode},
     execute,
     terminal::{
-        EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode,
-        enable_raw_mode,
+        disable_raw_mode, enable_raw_mode, EnterAlternateScreen,
+        LeaveAlternateScreen,
     },
 };
 use ratatui::{
-    Terminal,
     backend::CrosstermBackend,
     layout::{Alignment, Constraint, Direction, Layout},
     style::{Color, Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Paragraph},
+    Terminal,
 };
 use serde::{Deserialize, Serialize};
 use std::{
     fs::{self, OpenOptions},
-    io::{self, Write, stdout},
+    io::{self, stdout, Write},
     path::{Path, PathBuf},
     time::{Duration, Instant},
 };
@@ -29,6 +29,10 @@ struct Config {
     short_break_minutes: u64,
     long_break_minutes: u64,
     long_break_every: u64,
+    #[serde(default = "default_true")]
+    auto_start_breaks: bool,
+    #[serde(default = "default_true")]
+    auto_start_work: bool,
     sound_path: String,
     log_dir: String,
 }
@@ -40,10 +44,16 @@ impl Default for Config {
             short_break_minutes: 5,
             long_break_minutes: 15,
             long_break_every: 4,
+            auto_start_breaks: true,
+            auto_start_work: true,
             sound_path: String::new(),
             log_dir: "logs".to_string(),
         }
     }
+}
+
+fn default_true() -> bool {
+    true
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -162,6 +172,14 @@ impl App {
         self.reset_current(true);
     }
 
+    fn start_new_work_session(&mut self) {
+        self.set_session(SessionType::Work, true);
+    }
+
+    fn start_new_break_session(&mut self) {
+        self.set_session(SessionType::ShortBreak, true);
+    }
+
     fn skip(&mut self) {
         self.finish_current("skipped", true, false);
     }
@@ -213,16 +231,27 @@ impl App {
             }
         };
 
-        self.set_session(next);
+        let auto_start = match next {
+            SessionType::Work => self.config.auto_start_work,
+            SessionType::ShortBreak | SessionType::LongBreak => {
+                self.config.auto_start_breaks
+            }
+        };
+
+        self.set_session(next, auto_start);
     }
 
-    fn set_session(&mut self, session_type: SessionType) {
+    fn set_session(&mut self, session_type: SessionType, auto_start: bool) {
         self.session_type = session_type;
         let minutes = self.session_type.duration_minutes(&self.config);
         self.duration = Duration::from_secs(minutes * 60);
         self.remaining = self.duration;
-        self.status = TimerStatus::Running;
-        self.last_tick = Instant::now();
+        if auto_start {
+            self.status = TimerStatus::Running;
+            self.last_tick = Instant::now();
+        } else {
+            self.status = TimerStatus::Paused;
+        }
         self.session_start = Local::now();
     }
 
@@ -289,6 +318,8 @@ fn run_app<B: ratatui::backend::Backend>(
                     KeyCode::Char('p') => app.toggle_pause(),
                     KeyCode::Char('r') => app.restart(),
                     KeyCode::Char('c') => app.cancel(),
+                    KeyCode::Char('w') => app.start_new_work_session(),
+                    KeyCode::Char('b') => app.start_new_break_session(),
                     KeyCode::Char('n') => app.skip(),
                     KeyCode::Char('q') => app.request_exit(),
                     _ => {}
@@ -339,14 +370,27 @@ fn render_ui(frame: &mut ratatui::Frame, app: &App) {
 
     let timer_text = format_duration(app.remaining);
     let timer_lines = big_timer_lines(&timer_text);
+    let is_rest = matches!(
+        app.session_type,
+        SessionType::ShortBreak | SessionType::LongBreak
+    );
+    let timer_color = if is_rest {
+        Color::LightGreen
+    } else {
+        Color::Yellow
+    };
     let timer = Paragraph::new(timer_lines)
         .alignment(Alignment::Center)
         .style(
             Style::default()
-                .fg(Color::Yellow)
+                .fg(timer_color)
                 .add_modifier(Modifier::BOLD),
         )
-        .block(Block::default().borders(Borders::ALL));
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(timer_color)),
+        );
 
     let message_text = app.message.as_deref().unwrap_or("Ready");
     let footer = Paragraph::new(Line::from(vec![
@@ -358,7 +402,7 @@ fn render_ui(frame: &mut ratatui::Frame, app: &App) {
         ),
         Span::raw("  "),
         Span::styled(
-            "s: start  p: pause/resume  r: restart  c: cancel  n: next  q: quit",
+            "s: start  p: pause/resume  r: restart  c: cancel  w: work  b: break  n: next  q: quit",
             Style::default()
                 .fg(Color::Magenta)
                 .add_modifier(Modifier::DIM),
@@ -564,6 +608,8 @@ mod tests {
             short_break_minutes: 5,
             long_break_minutes: 15,
             long_break_every: 4,
+            auto_start_breaks: true,
+            auto_start_work: true,
             sound_path: String::new(),
             log_dir: "logs".to_string(),
         };

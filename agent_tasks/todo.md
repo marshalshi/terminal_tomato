@@ -15,3 +15,16 @@
 - Added repo-local config example and JSONL logging
 - Added audio playback on session completion with graceful fallback
 - Tests cover duration formatting, config validation, and log serialization
+
+# Auto-Transfer Settings Plan
+
+- [x] Add config fields for auto-start work and auto-start breaks
+- [x] Update session transition logic to honor auto-start settings
+- [x] Refresh config example and adjust tests for new config fields
+- [x] Note behavior changes in review section
+
+## Review
+
+- Added config toggles to control auto-start for work and break sessions
+- Session transitions now pause when auto-start is disabled, requiring manual start
+- Updated config example and test data for new settings
