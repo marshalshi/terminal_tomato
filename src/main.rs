@@ -432,11 +432,34 @@ fn big_timer_lines(text: &str) -> Vec<Line<'static>> {
             if index > 0 {
                 rows[row].push_str("  ");
             }
-            rows[row].push_str(part);
+            rows[row].push_str(&thicken_row(part));
         }
     }
 
-    rows.into_iter().map(Line::from).collect()
+    let taller_rows = thicken_rows(&rows, 2);
+    taller_rows.into_iter().map(Line::from).collect()
+}
+
+fn thicken_row(row: &str) -> String {
+    let mut thick = String::with_capacity(row.len() * 2);
+    for ch in row.chars() {
+        if ch == ' ' {
+            thick.push_str("  ");
+        } else {
+            thick.push_str("##");
+        }
+    }
+    thick
+}
+
+fn thicken_rows(rows: &[String], scale: usize) -> Vec<String> {
+    let mut expanded = Vec::with_capacity(rows.len() * scale);
+    for row in rows {
+        for _ in 0..scale {
+            expanded.push(row.clone());
+        }
+    }
+    expanded
 }
 
 fn big_glyph(ch: char) -> [&'static str; 7] {
