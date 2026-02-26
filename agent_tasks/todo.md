@@ -28,3 +28,16 @@
 - Added config toggles to control auto-start for work and break sessions
 - Session transitions now pause when auto-start is disabled, requiring manual start
 - Updated config example and test data for new settings
+
+# Show Seconds Setting Plan
+
+- [x] Add config field to toggle seconds display (default on)
+- [x] Update duration formatting to respect the setting
+- [x] Refresh config example and adjust tests
+- [x] Note behavior change in review section
+
+## Review
+
+- Added show_seconds config flag (default true) for minutes-only display
+- Timer formatting now hides seconds when disabled
+- Config example and tests updated for the new setting

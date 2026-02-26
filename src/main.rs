@@ -33,6 +33,8 @@ struct Config {
     auto_start_breaks: bool,
     #[serde(default = "default_true")]
     auto_start_work: bool,
+    #[serde(default = "default_true")]
+    show_seconds: bool,
     sound_path: String,
     log_dir: String,
 }
@@ -46,6 +48,7 @@ impl Default for Config {
             long_break_every: 4,
             auto_start_breaks: true,
             auto_start_work: true,
+            show_seconds: true,
             sound_path: String::new(),
             log_dir: "logs".to_string(),
         }
@@ -368,7 +371,7 @@ fn render_ui(frame: &mut ratatui::Frame, app: &App) {
     .alignment(Alignment::Center)
     .block(Block::default().borders(Borders::ALL));
 
-    let timer_text = format_duration(app.remaining);
+    let timer_text = format_duration(app.remaining, app.config.show_seconds);
     let timer_lines = big_timer_lines(&timer_text);
     let is_rest = matches!(
         app.session_type,
@@ -416,11 +419,15 @@ fn render_ui(frame: &mut ratatui::Frame, app: &App) {
     frame.render_widget(footer, chunks[2]);
 }
 
-fn format_duration(duration: Duration) -> String {
+fn format_duration(duration: Duration, show_seconds: bool) -> String {
     let total = duration.as_secs();
     let minutes = total / 60;
-    let seconds = total % 60;
-    format!("{:02}:{:02}", minutes, seconds)
+    if show_seconds {
+        let seconds = total % 60;
+        format!("{:02}:{:02}", minutes, seconds)
+    } else {
+        format!("{:02}", minutes)
+    }
 }
 
 fn big_timer_lines(text: &str) -> Vec<Line<'static>> {
@@ -621,7 +628,13 @@ mod tests {
     #[test]
     fn format_duration_minutes_seconds() {
         let duration = Duration::from_secs(125);
-        assert_eq!(format_duration(duration), "02:05");
+        assert_eq!(format_duration(duration, true), "02:05");
+    }
+
+    #[test]
+    fn format_duration_minutes_only() {
+        let duration = Duration::from_secs(125);
+        assert_eq!(format_duration(duration, false), "02");
     }
 
     #[test]
@@ -633,6 +646,7 @@ mod tests {
             long_break_every: 4,
             auto_start_breaks: true,
             auto_start_work: true,
+            show_seconds: true,
             sound_path: String::new(),
             log_dir: "logs".to_string(),
         };

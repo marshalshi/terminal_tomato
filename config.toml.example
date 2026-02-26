@@ -4,5 +4,6 @@ long_break_minutes = 15
 long_break_every = 4
 auto_start_breaks = true
 auto_start_work = true
+show_seconds = true
 sound_path = "chime.mp3"
 log_dir = "logs"
