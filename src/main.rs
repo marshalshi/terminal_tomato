@@ -35,6 +35,8 @@ struct Config {
     auto_start_work: bool,
     #[serde(default = "default_true")]
     show_seconds: bool,
+    #[serde(default = "default_clock_size")]
+    clock_size: ClockSize,
     sound_path: String,
     log_dir: String,
 }
@@ -49,10 +51,22 @@ impl Default for Config {
             auto_start_breaks: true,
             auto_start_work: true,
             show_seconds: true,
+            clock_size: ClockSize::Large,
             sound_path: String::new(),
             log_dir: "logs".to_string(),
         }
     }
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+enum ClockSize {
+    Large,
+    Small,
+}
+
+fn default_clock_size() -> ClockSize {
+    ClockSize::Large
 }
 
 fn default_true() -> bool {
@@ -372,7 +386,10 @@ fn render_ui(frame: &mut ratatui::Frame, app: &App) {
     .block(Block::default().borders(Borders::ALL));
 
     let timer_text = format_duration(app.remaining, app.config.show_seconds);
-    let timer_lines = big_timer_lines(&timer_text);
+    let timer_lines = match app.config.clock_size {
+        ClockSize::Large => big_timer_lines(&timer_text, 2, 2),
+        ClockSize::Small => big_timer_lines(&timer_text, 1, 1),
+    };
     let is_rest = matches!(
         app.session_type,
         SessionType::ShortBreak | SessionType::LongBreak
@@ -430,7 +447,11 @@ fn format_duration(duration: Duration, show_seconds: bool) -> String {
     }
 }
 
-fn big_timer_lines(text: &str) -> Vec<Line<'static>> {
+fn big_timer_lines(
+    text: &str,
+    width_scale: usize,
+    height_scale: usize,
+) -> Vec<Line<'static>> {
     let mut rows = vec![String::new(); 7];
 
     for (index, ch) in text.chars().enumerate() {
@@ -439,21 +460,20 @@ fn big_timer_lines(text: &str) -> Vec<Line<'static>> {
             if index > 0 {
                 rows[row].push_str("  ");
             }
-            rows[row].push_str(&thicken_row(part));
+            rows[row].push_str(&thicken_row(part, width_scale));
         }
     }
 
-    let taller_rows = thicken_rows(&rows, 2);
+    let taller_rows = thicken_rows(&rows, height_scale);
     taller_rows.into_iter().map(Line::from).collect()
 }
 
-fn thicken_row(row: &str) -> String {
-    let mut thick = String::with_capacity(row.len() * 2);
+fn thicken_row(row: &str, width_scale: usize) -> String {
+    let mut thick = String::with_capacity(row.len() * width_scale);
     for ch in row.chars() {
-        if ch == ' ' {
-            thick.push_str("  ");
-        } else {
-            thick.push_str("##");
+        let fill = if ch == ' ' { ' ' } else { '#' };
+        for _ in 0..width_scale {
+            thick.push(fill);
         }
     }
     thick
@@ -647,6 +667,7 @@ mod tests {
             auto_start_breaks: true,
             auto_start_work: true,
             show_seconds: true,
+            clock_size: ClockSize::Large,
             sound_path: String::new(),
             log_dir: "logs".to_string(),
         };

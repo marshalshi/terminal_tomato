@@ -41,3 +41,16 @@
 - Added show_seconds config flag (default true) for minutes-only display
 - Timer formatting now hides seconds when disabled
 - Config example and tests updated for the new setting
+
+# Clock Size Setting Plan
+
+- [x] Add config field for clock size (large or small)
+- [x] Render small clock text when configured
+- [x] Refresh config example and add tests for size switch
+- [x] Note behavior change in review section
+
+## Review
+
+- Added clock_size config with large/small options (default large)
+- Small clock renders a single-line timer text
+- Config example and tests updated for the new setting
