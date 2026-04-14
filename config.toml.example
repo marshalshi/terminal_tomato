@@ -8,3 +8,4 @@ show_seconds = true
 clock_size = "large"
 sound_path = "chime.mp3"
 log_dir = "logs"
+notification_enabled = false

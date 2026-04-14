@@ -48,12 +48,15 @@ long_break_minutes = 15
 long_break_every = 4
 sound_path = ""
 log_dir = "logs"
+notification_enabled = false
 ```
 
 Notes:
 
 - `sound_path` should point to an MP3 file. Leave empty to disable sound.
 - `log_dir` is a repo-local directory for JSONL logs.
+- `notification_enabled` sends a desktop notification when a session completes.
+  Set to `true` to enable. Requires `notify-send` (typically from `libnotify` package on Arch/Manjaro).
 
 ## Logs
 

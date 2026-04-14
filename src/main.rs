@@ -39,6 +39,8 @@ struct Config {
     clock_size: ClockSize,
     sound_path: String,
     log_dir: String,
+    #[serde(default)]
+    notification_enabled: bool,
 }
 
 impl Default for Config {
@@ -54,6 +56,7 @@ impl Default for Config {
             clock_size: ClockSize::Large,
             sound_path: String::new(),
             log_dir: "logs".to_string(),
+            notification_enabled: false,
         }
     }
 }
@@ -217,6 +220,10 @@ impl App {
         self.log_current(status);
         if should_play_sound && status == "completed" {
             play_sound(&self.config.sound_path);
+            send_notification(
+                self.config.notification_enabled,
+                self.session_type,
+            );
         }
 
         if advance {
@@ -641,6 +648,25 @@ fn play_sound(sound_path: &str) {
     });
 }
 
+fn send_notification(notification_enabled: bool, session_type: SessionType) {
+    if !notification_enabled {
+        return;
+    }
+
+    let (title, message) = match session_type {
+        SessionType::Work => {
+            ("Tomato Timer", "Work session completed! Time for a break.")
+        }
+        _ => ("Tomato Timer", "Break is over. Ready to focus?"),
+    };
+
+    std::thread::spawn(move || {
+        let _ = std::process::Command::new("notify-send")
+            .args(["-u", "normal", title, message])
+            .output();
+    });
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -670,6 +696,7 @@ mod tests {
             clock_size: ClockSize::Large,
             sound_path: String::new(),
             log_dir: "logs".to_string(),
+            notification_enabled: false,
         };
 
         let (validated, message) = validate_config(config);
