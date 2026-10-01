@@ -6,10 +6,11 @@ JSONL logs for tracking your working time.
 
 ## Features
 
-- Full-screen terminal UI with large timer display
+- Full-screen terminal UI with configurable timer size (`large`/`small`/`compact`)
 - Configurable work/short break/long break durations
 - Pause, start, restart, cancel, and skip controls
 - Optional MP3 sound on session completion
+- Looping background music while a work session is running
 - Daily JSONL logs stored locally
 
 ## Quick Start
@@ -46,7 +47,10 @@ work_minutes = 25
 short_break_minutes = 5
 long_break_minutes = 15
 long_break_every = 4
+show_seconds = true
+clock_size = "large"
 sound_path = ""
+music_path = "music.mp3"
 log_dir = "logs"
 notification_enabled = false
 ```
@@ -54,7 +58,10 @@ notification_enabled = false
 Notes:
 
 - `sound_path` should point to an MP3 file. Leave empty to disable sound.
+- `music_path` should point to the looping background MP3. It plays only while a
+  work session is running; leave it empty to disable background music.
 - `log_dir` is a repo-local directory for JSONL logs.
+- `clock_size` accepts `"large"`, `"small"`, or `"compact"`.
 - `notification_enabled` sends a desktop notification when a session completes.
   Set to `true` to enable. Requires `notify-send` (typically from `libnotify` package on Arch/Manjaro).
 

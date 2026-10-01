@@ -3,22 +3,22 @@ use crossterm::{
     event::{self, Event, KeyCode},
     execute,
     terminal::{
-        disable_raw_mode, enable_raw_mode, EnterAlternateScreen,
-        LeaveAlternateScreen,
+        EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode,
+        enable_raw_mode,
     },
 };
 use ratatui::{
+    Terminal,
     backend::CrosstermBackend,
     layout::{Alignment, Constraint, Direction, Layout},
     style::{Color, Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Paragraph},
-    Terminal,
 };
 use serde::{Deserialize, Serialize};
 use std::{
     fs::{self, OpenOptions},
-    io::{self, stdout, Write},
+    io::{self, Write, stdout},
     path::{Path, PathBuf},
     time::{Duration, Instant},
 };
@@ -38,6 +38,8 @@ struct Config {
     #[serde(default = "default_clock_size")]
     clock_size: ClockSize,
     sound_path: String,
+    #[serde(default = "default_music_path")]
+    music_path: String,
     log_dir: String,
     #[serde(default)]
     notification_enabled: bool,
@@ -55,6 +57,7 @@ impl Default for Config {
             show_seconds: true,
             clock_size: ClockSize::Large,
             sound_path: String::new(),
+            music_path: default_music_path(),
             log_dir: "logs".to_string(),
             notification_enabled: false,
         }
@@ -66,6 +69,7 @@ impl Default for Config {
 enum ClockSize {
     Large,
     Small,
+    Compact,
 }
 
 fn default_clock_size() -> ClockSize {
@@ -74,6 +78,10 @@ fn default_clock_size() -> ClockSize {
 
 fn default_true() -> bool {
     true
+}
+
+fn default_music_path() -> String {
+    "music.mp3".to_string()
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -127,6 +135,76 @@ struct App {
     completed_work_sessions: u64,
     message: Option<String>,
     should_exit: bool,
+}
+
+struct BackgroundMusic {
+    stream: Option<rodio::OutputStream>,
+    sink: Option<rodio::Sink>,
+    startup_attempted: bool,
+}
+
+impl BackgroundMusic {
+    fn new() -> Self {
+        Self {
+            stream: None,
+            sink: None,
+            startup_attempted: false,
+        }
+    }
+
+    fn sync(&mut self, app: &App) -> Result<(), String> {
+        if !should_play_background_music(app.session_type, app.status) {
+            self.stop();
+            return Ok(());
+        }
+
+        if self.sink.is_some() || self.startup_attempted {
+            return Ok(());
+        }
+
+        self.startup_attempted = true;
+        self.start(&app.config.music_path)
+    }
+
+    fn start(&mut self, music_path: &str) -> Result<(), String> {
+        if music_path.trim().is_empty() {
+            return Ok(());
+        }
+
+        let file = std::fs::File::open(music_path)
+            .map_err(|err| format!("Background music unavailable: {err}"))?;
+        let source = rodio::Decoder::new_looped(io::BufReader::new(file))
+            .map_err(|err| {
+                format!("Background music could not be decoded: {err}")
+            })?;
+        let (stream, handle) =
+            rodio::OutputStream::try_default().map_err(|err| {
+                format!("Background music output unavailable: {err}")
+            })?;
+        let sink = rodio::Sink::try_new(&handle).map_err(|err| {
+            format!("Background music sink unavailable: {err}")
+        })?;
+
+        sink.append(source);
+        self.stream = Some(stream);
+        self.sink = Some(sink);
+        Ok(())
+    }
+
+    fn stop(&mut self) {
+        if let Some(sink) = self.sink.take() {
+            sink.stop();
+        }
+        self.stream = None;
+        self.startup_attempted = false;
+    }
+}
+
+fn should_play_background_music(
+    session_type: SessionType,
+    status: TimerStatus,
+) -> bool {
+    session_type == SessionType::Work && status == TimerStatus::Running
 }
 
 impl App {
@@ -327,8 +405,12 @@ fn run_app<B: ratatui::backend::Backend>(
     mut app: App,
 ) -> io::Result<()> {
     let tick_rate = Duration::from_millis(200);
+    let mut background_music = BackgroundMusic::new();
 
     loop {
+        if let Err(message) = background_music.sync(&app) {
+            app.message = Some(message);
+        }
         terminal.draw(|frame| render_ui(frame, &app))?;
 
         if app.should_exit {
@@ -396,6 +478,7 @@ fn render_ui(frame: &mut ratatui::Frame, app: &App) {
     let timer_lines = match app.config.clock_size {
         ClockSize::Large => big_timer_lines(&timer_text, 2, 2),
         ClockSize::Small => big_timer_lines(&timer_text, 1, 1),
+        ClockSize::Compact => vec![Line::from(timer_text.clone())],
     };
     let is_rest = matches!(
         app.session_type,
@@ -695,6 +778,7 @@ mod tests {
             show_seconds: true,
             clock_size: ClockSize::Large,
             sound_path: String::new(),
+            music_path: default_music_path(),
             log_dir: "logs".to_string(),
             notification_enabled: false,
         };
@@ -702,6 +786,85 @@ mod tests {
         let (validated, message) = validate_config(config);
         assert_eq!(validated.work_minutes, 25);
         assert!(message.is_some());
+    }
+
+    #[test]
+    fn music_plays_only_during_running_work_sessions() {
+        assert!(should_play_background_music(
+            SessionType::Work,
+            TimerStatus::Running
+        ));
+        assert!(!should_play_background_music(
+            SessionType::Work,
+            TimerStatus::Paused
+        ));
+        assert!(!should_play_background_music(
+            SessionType::ShortBreak,
+            TimerStatus::Running
+        ));
+        assert!(!should_play_background_music(
+            SessionType::LongBreak,
+            TimerStatus::Running
+        ));
+    }
+
+    #[test]
+    fn music_state_tracks_session_transitions() {
+        let log_dir = std::env::temp_dir()
+            .join(format!("terminal-tomato-test-{}", std::process::id()));
+        let mut config = Config::default();
+        config.log_dir = log_dir.to_string_lossy().into_owned();
+        let mut app = App::new(config, None);
+        assert!(!should_play_background_music(app.session_type, app.status));
+
+        app.start();
+        assert!(should_play_background_music(app.session_type, app.status));
+
+        app.toggle_pause();
+        assert!(!should_play_background_music(app.session_type, app.status));
+
+        app.set_session(SessionType::ShortBreak, true);
+        assert!(!should_play_background_music(app.session_type, app.status));
+
+        app.set_session(SessionType::Work, true);
+        assert!(should_play_background_music(app.session_type, app.status));
+
+        app.cancel();
+        assert!(!should_play_background_music(app.session_type, app.status));
+        fs::remove_dir_all(log_dir).expect("remove test logs");
+    }
+
+    #[test]
+    fn music_path_defaults_when_omitted_from_config() {
+        let config: Config = toml::from_str(
+            r#"
+                work_minutes = 25
+                short_break_minutes = 5
+                long_break_minutes = 15
+                long_break_every = 4
+                sound_path = ""
+                log_dir = "logs"
+            "#,
+        )
+        .expect("parse config");
+
+        assert_eq!(config.music_path, "music.mp3");
+    }
+
+    #[test]
+    fn music_start_failures_are_reported_once_per_running_session() {
+        let mut app = App::new(Config::default(), None);
+        app.config.music_path = "missing-music.mp3".to_string();
+        app.start();
+        let mut music = BackgroundMusic::new();
+
+        assert!(music.sync(&app).is_err());
+        assert!(music.sync(&app).is_ok());
+        assert!(music.startup_attempted);
+
+        app.toggle_pause();
+        music.sync(&app).expect("stop music while paused");
+        assert!(!music.startup_attempted);
     }
 
     #[test]

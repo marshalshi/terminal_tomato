@@ -7,5 +7,8 @@ auto_start_work = true
 show_seconds = true
 clock_size = "large"
 sound_path = "chime.mp3"
+music_path = "music.mp3"
 log_dir = "logs"
 notification_enabled = false
+
+# clock_size options: "large", "small", "compact"
